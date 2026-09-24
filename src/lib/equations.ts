@@ -97,7 +97,7 @@ type DefinitionBuilder = (
   rng: Rng,
 ) => LinearEquation | null;
 
-const definitionBuilders: DefinitionBuilder[] = [
+const oneStepBuilders: DefinitionBuilder[] = [
   // k × P = V
   (pivot, target, values, rng) => {
     const k = rng.int(2, 5);
@@ -149,6 +149,10 @@ const definitionBuilders: DefinitionBuilder[] = [
       display: `${n} - ${pivot} = ${target}`,
     };
   },
+];
+
+/** Definitions that need a multiplication and an addition or subtraction. */
+const twoStepBuilders: DefinitionBuilder[] = [
   // k × P - m = V
   (pivot, target, values, rng) => {
     const k = rng.int(2, 4);
@@ -230,6 +234,29 @@ const pinBuilders: DefinitionBuilder[] = [
       display: `${k} ${TIMES} ${pivot} = ${n}`,
     };
   },
+  // k × P + m = n
+  (pivot, _target, values, rng) => {
+    const k = rng.int(2, 4);
+    const m = rng.int(1, 12);
+    const n = k * values[pivot]! + m;
+    return {
+      coeffs: { [pivot]: k },
+      constant: m - n,
+      display: `${k} ${TIMES} ${pivot} + ${m} = ${n}`,
+    };
+  },
+  // k × P - m = n
+  (pivot, _target, values, rng) => {
+    const k = rng.int(2, 4);
+    const m = rng.int(1, 12);
+    const n = k * values[pivot]! - m;
+    if (n < 1) return null;
+    return {
+      coeffs: { [pivot]: k },
+      constant: -m - n,
+      display: `${k} ${TIMES} ${pivot} - ${m} = ${n}`,
+    };
+  },
 ];
 
 /**
@@ -260,13 +287,35 @@ function buildSignedSum(
   };
 }
 
-/** `X + Y = n` / `X - Y = n`: a pin that uses the pivot plus one other unknown. */
+/**
+ * `X + Y = n` / `X - Y = n`: a pin that uses the pivot plus one other unknown.
+ * With `weighted`, the pivot carries a factor, e.g. `2 × A + B = n`.
+ */
 function buildPairPin(
   pivot: string,
   other: string,
   values: Record<string, number>,
   rng: Rng,
+  weighted = false,
 ): LinearEquation | null {
+  if (weighted) {
+    const k = rng.int(2, 3);
+    if (rng.bool()) {
+      const n = k * values[pivot]! + values[other]!;
+      return {
+        coeffs: { [pivot]: k, [other]: 1 },
+        constant: -n,
+        display: `${k} ${TIMES} ${pivot} + ${other} = ${n}`,
+      };
+    }
+    const n = k * values[pivot]! - values[other]!;
+    if (n < 1) return null;
+    return {
+      coeffs: { [pivot]: k, [other]: -1 },
+      constant: -n,
+      display: `${k} ${TIMES} ${pivot} - ${other} = ${n}`,
+    };
+  }
   if (rng.bool()) {
     const n = values[pivot]! + values[other]!;
     return {
@@ -289,6 +338,59 @@ function buildPairPin(
  * ------------------------------------------------------------------ */
 
 const VARIABLE_COUNT: Record<Difficulty, number> = { low: 2, medium: 3, high: 4 };
+
+/**
+ * How the equations of a level are drawn. None of this changes the shape of a
+ * system (2 / 3 / 4 unknowns and equations); it only decides how much
+ * arithmetic each equation carries.
+ */
+interface EquationProfile {
+  /** Chance that a definition needs two operations, e.g. `3 × C - 1 = B`. */
+  twoStepChance: number;
+  /** Chance that a definition combines two known unknowns, e.g. `2 × A + C = B`. */
+  combinationChance: number;
+  /** Chance that the pinning equation is a signed sum over every unknown. */
+  signedSumChance: number;
+  /** Chance that a pair pin carries a factor, e.g. `2 × A + B = 23`. */
+  weightedPinChance: number;
+}
+
+const PROFILE: Record<Difficulty, EquationProfile> = {
+  low: { twoStepChance: 0.6, combinationChance: 0, signedSumChance: 0, weightedPinChance: 0.5 },
+  medium: { twoStepChance: 0.5, combinationChance: 0.5, signedSumChance: 0.6, weightedPinChance: 0.4 },
+  high: { twoStepChance: 0.6, combinationChance: 0.55, signedSumChance: 0.7, weightedPinChance: 0.4 },
+};
+
+/**
+ * Work an equation asks for: one per arithmetic operator plus one per unknown
+ * it links. `3 × C - 1 = B` scores 4, `C + 3 = B` scores 3, `A + B = 20` scores 3.
+ */
+export function equationLoad(display: string): number {
+  const operators = (display.match(/[+\-×÷]/g) ?? []).length;
+  const unknowns = new Set(display.match(/[A-D]/g) ?? []).size;
+  return operators + unknowns;
+}
+
+export const systemLoad = (displays: string[]): number =>
+  displays.reduce((total, display) => total + equationLoad(display), 0);
+
+/**
+ * Exact `systemLoad` for each of the 20 slots of a section, aligned with
+ * `DIFFICULTY_PLAN` (6 low, 8 medium, 6 high). Fixing the load per slot makes
+ * every mock test equally hard and keeps the easy-to-hard ramp inside a section.
+ */
+export const MATH_LOAD_PLAN: number[] = [
+  6, 6, 7, 7, 7, 8,
+  12, 12, 13, 13, 13, 14, 14, 15,
+  17, 18, 18, 19, 19, 21,
+];
+
+/** Accepted `systemLoad` range per level when no exact target is given. */
+const LOAD_RANGE: Record<Difficulty, { min: number; max: number }> = {
+  low: { min: 6, max: 8 },
+  medium: { min: 12, max: 15 },
+  high: { min: 17, max: 21 },
+};
 
 function buildExplanation(
   pivot: string,
@@ -321,13 +423,21 @@ function buildExplanation(
   return lines;
 }
 
+/**
+ * `targetLoad` pins the system to an exact `systemLoad`; without it any load in
+ * the level's `LOAD_RANGE` is accepted.
+ */
 export function generateMathEquationsQuestion(
   id: string,
   difficulty: Difficulty,
   rng: Rng,
+  targetLoad?: number,
 ): MathEquationsQuestion {
   const variableCount = VARIABLE_COUNT[difficulty];
   const variables = VARIABLE_NAMES.slice(0, variableCount);
+  const profile = PROFILE[difficulty];
+  const { min: minLoad, max: maxLoad } =
+    targetLoad === undefined ? LOAD_RANGE[difficulty] : { min: targetLoad, max: targetLoad };
 
   for (let attempt = 0; attempt < 4000; attempt += 1) {
     const values: Record<string, number> = {};
@@ -346,11 +456,15 @@ export function generateMathEquationsQuestion(
     for (const target of others) {
       let equation: LinearEquation | null = null;
       // From medium upwards, occasionally define an unknown from two others.
-      if (difficulty !== 'low' && known.length >= 2 && rng.bool(0.35)) {
+      if (known.length >= 2 && rng.bool(profile.combinationChance)) {
         equation = buildCombinationDefinition(known, target, values, rng);
       }
       if (!equation) {
-        for (const builder of rng.shuffle(definitionBuilders)) {
+        const twoStepFirst = rng.bool(profile.twoStepChance);
+        const builders = twoStepFirst
+          ? [...rng.shuffle(twoStepBuilders), ...rng.shuffle(oneStepBuilders)]
+          : [...rng.shuffle(oneStepBuilders), ...rng.shuffle(twoStepBuilders)];
+        for (const builder of builders) {
           equation = builder(pivot, target, values, rng);
           if (equation) break;
         }
@@ -369,7 +483,7 @@ export function generateMathEquationsQuestion(
     let pin: LinearEquation | null = null;
     if (difficulty === 'low') {
       if (rng.bool(0.5) && others[0]) {
-        pin = buildPairPin(pivot, others[0], values, rng);
+        pin = buildPairPin(pivot, others[0], values, rng, rng.bool(profile.weightedPinChance));
       }
       if (!pin) {
         for (const builder of rng.shuffle(pinBuilders)) {
@@ -378,11 +492,11 @@ export function generateMathEquationsQuestion(
         }
       }
     } else {
-      if (rng.bool(0.6)) {
+      if (rng.bool(profile.signedSumChance)) {
         pin = buildSignedSum(variables, values, rng);
       }
       if (!pin && others[0]) {
-        pin = buildPairPin(pivot, others[0], values, rng);
+        pin = buildPairPin(pivot, others[0], values, rng, rng.bool(profile.weightedPinChance));
       }
       if (!pin) pin = buildSignedSum(variables, values, rng);
       if (!pin) continue;
@@ -391,6 +505,8 @@ export function generateMathEquationsQuestion(
     if (!pin) continue;
 
     const equations = [...definitions.map((d) => d.equation), pin];
+    const load = systemLoad(equations.map((equation) => equation.display));
+    if (load < minLoad || load > maxLoad) continue;
     if (!satisfies(equations, values)) continue;
 
     // Prove the system has exactly one solution over the whole domain.

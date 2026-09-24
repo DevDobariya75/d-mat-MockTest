@@ -280,18 +280,20 @@ describe('latin squares', () => {
       const clues = clueCount(question);
       const steps = question.explanation.length;
       if (question.difficulty === 'low') {
-        expect(clues).toBeGreaterThanOrEqual(15);
+        expect(clues).toBe(13);
+        // Even the easiest task needs another field filled in first.
+        expect(steps).toBeGreaterThanOrEqual(2);
         expect(steps).toBeLessThanOrEqual(4);
       }
       if (question.difficulty === 'medium') {
-        expect(clues).toBeLessThanOrEqual(12);
-        expect(steps).toBeGreaterThanOrEqual(3);
-        expect(steps).toBeLessThanOrEqual(8);
+        expect(clues).toBe(11);
+        expect(steps).toBeGreaterThanOrEqual(6);
+        expect(steps).toBeLessThanOrEqual(9);
       }
       if (question.difficulty === 'high') {
-        expect(clues).toBeLessThanOrEqual(10);
-        expect(steps).toBeGreaterThanOrEqual(6);
-        expect(steps).toBeLessThanOrEqual(13);
+        expect(clues).toBe(9);
+        expect(steps).toBeGreaterThanOrEqual(10);
+        expect(steps).toBeLessThanOrEqual(16);
       }
     }
   });

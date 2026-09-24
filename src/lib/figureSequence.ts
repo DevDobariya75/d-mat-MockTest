@@ -512,10 +512,105 @@ const DIRECTION_CYCLES: Direction[][] = [
   ['up', 'left', 'down', 'right'],
 ];
 
+/**
+ * How much each level asks of the test taker. Every knob stays within the rule
+ * list of the preparatory materials; a harder level only combines more of them.
+ */
+interface DifficultyProfile {
+  /** Chance of a third (medium) or fourth (high) figure. */
+  extraFigureChance: number;
+  /** Chance that a figure uses an advanced movement (steps > 1, x + 1, direction cycle). */
+  advancedChance: number;
+  rotationChance: number;
+  /** Chance that a rotating figure turns x + 1 times instead of a constant amount. */
+  rotationAccelChance: number;
+  colorChance: number;
+  /** Chance that a colour-changing figure cycles through three colours rather than two. */
+  threeColorChance: number;
+  /**
+   * Accepted range of `ruleLoad` for a whole series. Keeps every task close to
+   * its level, so each mock test ends up equally hard rather than hard on average.
+   */
+  loadRange: { min: number; max: number };
+}
+
+const PROFILE: Record<Difficulty, DifficultyProfile> = {
+  low: {
+    extraFigureChance: 0,
+    advancedChance: 0.35,
+    rotationChance: 0.4,
+    rotationAccelChance: 0,
+    colorChance: 0.25,
+    threeColorChance: 0.3,
+    loadRange: { min: 2, max: 3 },
+  },
+  medium: {
+    extraFigureChance: 0.65,
+    advancedChance: 0.6,
+    rotationChance: 0.65,
+    rotationAccelChance: 0.2,
+    colorChance: 0.5,
+    threeColorChance: 0.5,
+    loadRange: { min: 5, max: 8 },
+  },
+  high: {
+    extraFigureChance: 0.7,
+    advancedChance: 0.85,
+    rotationChance: 0.8,
+    rotationAccelChance: 0.45,
+    colorChance: 0.65,
+    threeColorChance: 0.6,
+    loadRange: { min: 10, max: 14 },
+  },
+};
+
+/**
+ * Exact `ruleLoad` for each of the 20 slots of a section, aligned with
+ * `DIFFICULTY_PLAN` (6 low, 8 medium, 6 high). Fixing the load per slot makes
+ * every mock test equally hard and keeps the easy-to-hard ramp inside a section.
+ */
+export const FIGURE_LOAD_PLAN: number[] = [
+  2, 2, 2, 2, 3, 3,
+  5, 6, 6, 6, 7, 7, 7, 8,
+  11, 12, 12, 12, 13, 13,
+];
+
+const isAdvancedMotion = (motion: Motion): boolean => {
+  switch (motion.kind) {
+    case 'line':
+    case 'diagonal':
+    case 'border':
+      return motion.step > 1 || motion.accelerate;
+    case 'directions':
+      return true;
+    default:
+      return false;
+  }
+};
+
+/**
+ * How many separate rule components a test taker has to track to solve the
+ * series: one movement per figure, plus one for every advanced movement,
+ * rotation, accelerating rotation and colour change beyond the first colour.
+ */
+export function ruleLoad(rules: FigureRule[]): number {
+  return rules.reduce(
+    (load, rule) =>
+      load +
+      1 +
+      (isAdvancedMotion(rule.motion) ? 1 : 0) +
+      (rule.rotationStep !== 0 ? 1 : 0) +
+      (rule.rotationAccelerates ? 1 : 0) +
+      (rule.colorCycle.length - 1),
+    0,
+  );
+}
+
 const figureCountFor = (difficulty: Difficulty, rng: Rng): number => {
+  const extra = rng.bool(PROFILE[difficulty].extraFigureChance) ? 1 : 0;
   if (difficulty === 'low') return 1;
-  if (difficulty === 'medium') return rng.int(2, 3);
-  return rng.int(3, 4);
+  if (difficulty === 'medium') return 2 + extra;
+  return 3 + extra;
 };
 
 function sampleMotion(difficulty: Difficulty, rng: Rng): Motion {
@@ -551,9 +646,7 @@ function sampleMotion(difficulty: Difficulty, rng: Rng): Motion {
     { kind: 'directions', order: rng.pick(DIRECTION_CYCLES) },
   ];
 
-  if (difficulty === 'low') return rng.pick(simple);
-  if (difficulty === 'medium') return rng.bool(0.6) ? rng.pick(simple) : rng.pick(advanced);
-  return rng.bool(0.3) ? rng.pick(simple) : rng.pick(advanced);
+  return rng.bool(PROFILE[difficulty].advancedChance) ? rng.pick(advanced) : rng.pick(simple);
 }
 
 function sampleStart(motion: Motion, rng: Rng): { row: number; col: number } {
@@ -572,12 +665,11 @@ function sampleStart(motion: Motion, rng: Rng): { row: number; col: number } {
 
 function sampleRule(difficulty: Difficulty, shape: FigureShape, rng: Rng): FigureRule {
   const motion = sampleMotion(difficulty, rng);
+  const profile = PROFILE[difficulty];
   const canRotate = ORIENTED_SHAPES.has(shape);
-  const rotationChance = difficulty === 'low' ? 0.15 : difficulty === 'medium' ? 0.45 : 0.6;
-  const rotationStep = canRotate && rng.bool(rotationChance) ? (rng.bool() ? 1 : -1) : 0;
-  const colorChance = difficulty === 'low' ? 0.1 : difficulty === 'medium' ? 0.3 : 0.5;
-  const colorCycle = rng.bool(colorChance)
-    ? rng.shuffle(COLOR_POOL).slice(0, rng.int(2, 3))
+  const rotationStep = canRotate && rng.bool(profile.rotationChance) ? (rng.bool() ? 1 : -1) : 0;
+  const colorCycle = rng.bool(profile.colorChance)
+    ? rng.shuffle(COLOR_POOL).slice(0, rng.bool(profile.threeColorChance) ? 3 : 2)
     : [rng.pick(COLOR_POOL)];
 
   return {
@@ -585,7 +677,7 @@ function sampleRule(difficulty: Difficulty, shape: FigureShape, rng: Rng): Figur
     start: sampleStart(motion, rng),
     motion,
     rotationStep,
-    rotationAccelerates: rotationStep !== 0 && difficulty === 'high' && rng.bool(0.3),
+    rotationAccelerates: rotationStep !== 0 && rng.bool(profile.rotationAccelChance),
     startRotation: (rng.int(0, 3) * 90) as Rotation,
     colorCycle,
   };
@@ -595,13 +687,25 @@ function sampleRule(difficulty: Difficulty, shape: FigureShape, rng: Rng): Figur
  * Question generation
  * ------------------------------------------------------------------ */
 
+/**
+ * `targetLoad` pins the series to an exact `ruleLoad`; without it any load in
+ * the level's `loadRange` is accepted.
+ */
 export function generateFigureSequenceQuestion(
   id: string,
   difficulty: Difficulty,
   rng: Rng,
+  targetLoad?: number,
 ): FigureSequenceQuestion {
+  const { min: minLoad, max: maxLoad } =
+    targetLoad === undefined
+      ? PROFILE[difficulty].loadRange
+      : { min: targetLoad, max: targetLoad };
+
+  // Drawn once, not per attempt: busier series fail the overlap check more
+  // often, so re-drawing would quietly bias the bank towards fewer figures.
+  const count = figureCountFor(difficulty, rng);
   for (let attempt = 0; attempt < 800; attempt += 1) {
-    const count = figureCountFor(difficulty, rng);
     const shapes = rng.shuffle(SHAPES).slice(0, count);
     const rules = shapes.map((shape) => sampleRule(difficulty, shape, rng));
 
@@ -613,6 +717,9 @@ export function generateFigureSequenceQuestion(
         rules[i] = sampleRule(difficulty, rules[i]!.shape, rng);
       }
     }
+
+    const load = ruleLoad(rules);
+    if (load < minLoad || load > maxLoad) continue;
 
     const matrices = buildSequence(rules);
     if (!matrices) continue;

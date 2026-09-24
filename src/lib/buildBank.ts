@@ -4,14 +4,14 @@ import {
   SECTION_SPECS,
   TOTAL_TESTS,
 } from '@/data/examSpec';
-import { generateFigureSequenceQuestion } from '@/lib/figureSequence';
-import { generateLatinSquaresQuestion } from '@/lib/latinSquare';
-import { generateMathEquationsQuestion } from '@/lib/equations';
+import { FIGURE_LOAD_PLAN, generateFigureSequenceQuestion } from '@/lib/figureSequence';
+import { generateLatinSquaresQuestion, LATIN_STEP_PLAN } from '@/lib/latinSquare';
+import { generateMathEquationsQuestion, MATH_LOAD_PLAN } from '@/lib/equations';
 import { createRng, hashSeed } from '@/lib/rng';
 import { questionSignature } from '@/lib/signature';
 import type { Difficulty, MockTest, Question, QuestionBank, SectionId, TestSection } from '@/types';
 
-export const BANK_VERSION = 2;
+export const BANK_VERSION = 4;
 export const DEFAULT_SEED = 20260421; // Date of the source preparatory materials.
 
 /** How many different seeds a single question may be re-rolled with. */
@@ -21,15 +21,16 @@ function generateQuestion(
   sectionId: SectionId,
   id: string,
   difficulty: Difficulty,
+  index: number,
   rng: ReturnType<typeof createRng>,
 ): Question {
   switch (sectionId) {
     case 'figure-sequences':
-      return generateFigureSequenceQuestion(id, difficulty, rng);
+      return generateFigureSequenceQuestion(id, difficulty, rng, FIGURE_LOAD_PLAN[index]);
     case 'mathematical-equations':
-      return generateMathEquationsQuestion(id, difficulty, rng);
+      return generateMathEquationsQuestion(id, difficulty, rng, MATH_LOAD_PLAN[index]);
     case 'latin-squares':
-      return generateLatinSquaresQuestion(id, difficulty, rng);
+      return generateLatinSquaresQuestion(id, difficulty, rng, LATIN_STEP_PLAN[index]);
   }
 }
 
@@ -57,7 +58,7 @@ function generateUniqueQuestion(
     const rng = createRng(hashSeed(seed, testId, sectionId, index, attempt));
     let question: Question;
     try {
-      question = generateQuestion(sectionId, id, difficulty, rng);
+      question = generateQuestion(sectionId, id, difficulty, index, rng);
     } catch (cause) {
       lastError = cause;
       continue;

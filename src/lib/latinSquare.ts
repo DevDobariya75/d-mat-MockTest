@@ -263,29 +263,47 @@ export function randomLatinSquare(rng: Rng): LatinLetter[][] {
 
 /** Number of clues left on the grid, by difficulty. */
 const CLUE_TARGET: Record<Difficulty, number> = {
-  low: 15,
-  medium: 12,
-  high: 10,
+  low: 13,
+  medium: 11,
+  high: 9,
 };
 
 /**
  * Length of the deduction chain that leads to the question mark. The official
- * solution keys run from a single step (low) to roughly seven steps (high), so
- * the bounds keep every task solvable in the ~75 s a test taker has per task.
+ * solution keys run from a single step (low) to roughly seven steps (high); the
+ * bank deliberately sits above that, so every level needs at least one other
+ * field filled in first, while the chain stays short enough to hold in your head.
  */
 const STEP_RANGE: Record<Difficulty, { min: number; max: number }> = {
-  low: { min: 1, max: 4 },
-  medium: { min: 3, max: 8 },
-  high: { min: 6, max: 13 },
+  low: { min: 2, max: 4 },
+  medium: { min: 6, max: 9 },
+  high: { min: 10, max: 16 },
 };
 
+/**
+ * Exact deduction-chain length for each of the 20 slots of a section, aligned
+ * with `DIFFICULTY_PLAN` (6 low, 8 medium, 6 high). Fixing it per slot makes
+ * every mock test equally hard and keeps the easy-to-hard ramp inside a section.
+ */
+export const LATIN_STEP_PLAN: number[] = [
+  2, 3, 3, 3, 4, 4,
+  6, 7, 7, 8, 8, 8, 9, 9,
+  10, 11, 12, 13, 14, 14,
+];
+
+/**
+ * `targetSteps` pins the solution path to an exact length; without it any
+ * length in the level's `STEP_RANGE` is accepted.
+ */
 export function generateLatinSquaresQuestion(
   id: string,
   difficulty: Difficulty,
   rng: Rng,
+  targetSteps?: number,
 ): LatinSquaresQuestion {
   const clueTarget = CLUE_TARGET[difficulty];
-  const { min: minSteps, max: maxSteps } = STEP_RANGE[difficulty];
+  const { min: minSteps, max: maxSteps } =
+    targetSteps === undefined ? STEP_RANGE[difficulty] : { min: targetSteps, max: targetSteps };
 
   for (let attempt = 0; attempt < 400; attempt += 1) {
     const solution = randomLatinSquare(rng);

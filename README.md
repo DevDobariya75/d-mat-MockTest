@@ -9,7 +9,7 @@
 ![React](https://img.shields.io/badge/react-frontend-61DAFB?logo=react&logoColor=black)
 ![No Backend](https://img.shields.io/badge/backend-none%20(localStorage)-lightgrey)
 ![Questions](https://img.shields.io/badge/questions-600%20original-blue)
-![Tests](https://img.shields.io/badge/tests-231%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-260%20passing-brightgreen)
 ![Status](https://img.shields.io/badge/status-unofficial%20practice%20tool-orange)
 
 </div>
@@ -42,7 +42,7 @@ npm run dev          # → http://localhost:5173
 ```
 
 <table>
-<tr><td><code>npm test</code></td><td>231 tests</td></tr>
+<tr><td><code>npm test</code></td><td>260 tests</td></tr>
 <tr><td><code>npm run build</code></td><td>typecheck + production build into <code>dist/</code></td></tr>
 <tr><td><code>npm run preview</code></td><td>serve the production build</td></tr>
 </table>

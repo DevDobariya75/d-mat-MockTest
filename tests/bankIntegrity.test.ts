@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { DIFFICULTY_PLAN, QUESTIONS_PER_SECTION, TOTAL_TESTS } from '@/data/examSpec';
 import { mockTests } from '@/data/questionBank';
 import { buildBank } from '@/lib/buildBank';
+import { MATH_LOAD_PLAN, systemLoad } from '@/lib/equations';
+import { FIGURE_LOAD_PLAN } from '@/lib/figureSequence';
+import { LATIN_STEP_PLAN } from '@/lib/latinSquare';
 import {
   equationSignature,
   figureMovementSignature,
@@ -159,6 +162,80 @@ describe('the difficulty label reflects the actual task', () => {
 
     expect(Math.min(...clues('low'))).toBeGreaterThan(Math.max(...clues('medium')));
     expect(Math.min(...clues('medium'))).toBeGreaterThan(Math.max(...clues('high')));
+  });
+});
+
+/**
+ * Rule components of a figure series, read back from its solution key alone:
+ * one movement per figure, plus one per advanced movement, rotation,
+ * accelerating rotation and extra colour. Mirrors `ruleLoad` in the engine.
+ */
+const figureLoadFromKey = (question: Question): number => {
+  if (question.type !== 'figure-sequence') return 0;
+  return question.explanation.reduce((load, line) => {
+    let figure = 1;
+    if (/x \+ 1 fields|by [2-9] fields|repeating order/.test(line)) figure += 1;
+    if (/rotates 90|turns x \+ 1/.test(line)) figure += 1;
+    if (/turns x \+ 1/.test(line)) figure += 1;
+    const colours = line.match(/colour in the order (.*?), and so on/);
+    if (colours) figure += colours[1]!.split(' to ').length - 1;
+    return load + figure;
+  }, 0);
+};
+
+const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+
+describe('every mock test is equally hard', () => {
+  it('aligns the per-slot plans with the difficulty ramp', () => {
+    for (const plan of [FIGURE_LOAD_PLAN, MATH_LOAD_PLAN, LATIN_STEP_PLAN]) {
+      expect(plan).toHaveLength(QUESTIONS_PER_SECTION);
+      // Never easier than the slot before it.
+      plan.forEach((value, i) => {
+        if (i > 0) expect(value).toBeGreaterThanOrEqual(plan[i - 1]!);
+      });
+    }
+  });
+
+  it('gives every figure series exactly its planned rule load', () => {
+    for (const test of mockTests) {
+      const section = test.sections.find((s) => s.id === 'figure-sequences')!;
+      expect(section.questions.map(figureLoadFromKey), `test ${test.id}`).toEqual(
+        FIGURE_LOAD_PLAN,
+      );
+    }
+  });
+
+  it('gives every equation system exactly its planned load', () => {
+    for (const test of mockTests) {
+      const section = test.sections.find((s) => s.id === 'mathematical-equations')!;
+      expect(
+        section.questions.map((q) => (q.type === 'math-equations' ? systemLoad(q.equations) : 0)),
+        `test ${test.id}`,
+      ).toEqual(MATH_LOAD_PLAN);
+    }
+  });
+
+  it('gives every Latin square exactly its planned deduction chain', () => {
+    for (const test of mockTests) {
+      const section = test.sections.find((s) => s.id === 'latin-squares')!;
+      expect(
+        section.questions.map((q) => q.explanation.length),
+        `test ${test.id}`,
+      ).toEqual(LATIN_STEP_PLAN);
+    }
+  });
+
+  it('sits about 40% above the previous bank in both sections', () => {
+    // Section totals of the previous bank (v2), averaged over its ten tests:
+    // 99.6 figure rule components and 110.7 Latin deduction steps.
+    expect(sum(FIGURE_LOAD_PLAN) / 99.6).toBeGreaterThanOrEqual(1.38);
+    expect(sum(LATIN_STEP_PLAN) / 110.7).toBeGreaterThanOrEqual(1.38);
+  });
+
+  it('sits about 20% above the original bank in Mathematical Equations', () => {
+    // Section total of the original bank (v2), averaged over its ten tests:
+    // 215.7 operators plus linked unknowns.
+    expect(sum(MATH_LOAD_PLAN) / 215.7).toBeGreaterThanOrEqual(1.19);
   });
 });
 

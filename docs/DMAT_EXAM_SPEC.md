@@ -304,6 +304,53 @@ Each 20-task section is 6 low, 8 medium and 6 high, in that order, so every mock
 18 / 24 / 18 and the bank totals 180 / 240 / 180. The level corresponds to a measurable
 property in every subtest (figure count, number of unknowns, clue count), not just a label.
 
+### Difficulty level (bank v3)
+
+Figure Sequences and Latin Squares were made about **40% harder** in bank v3, measured on
+the load a test taker has to carry. Question formats did not change, and every rule still
+comes from the preparatory materials.
+
+| Subtest | Load measure | v2 section total (mean of 10 tests) | v3 section total (every test) | Change |
+| --- | --- | --- | --- | --- |
+| Figure Sequences | rule components: one per figure, plus one per advanced movement (steps > 1, x + 1, direction cycle), rotation, x + 1 rotation and extra colour | 99.6 (range 86–116) | **139** | +40% |
+| Latin Squares | deduction steps to the question mark | 110.7 (range 102–126) | **155** | +40% |
+
+What changed per level:
+
+| | low | medium | high |
+| --- | --- | --- | --- |
+| Figure rule load per task (v2 → v3) | 1.4 → 2.3 | 4.8 → 6.5 | 8.8 → 12.2 |
+| Figures per matrix (v2 → v3 mean) | 1 → 1 | 2.4 → 2.6 | 3.3 → 3.6 |
+| Latin clues (v2 → v3) | 15 → 13 | 12 → 11 | 10 → 9 |
+| Latin deduction steps (v2 → v3) | 1–4 → 2–4 | 3–8 → 6–9 | 6–13 → 10–14 |
+
+Each of the 20 slots in a section has a **fixed load target** (`FIGURE_LOAD_PLAN` in
+`src/lib/figureSequence.ts`, `LATIN_STEP_PLAN` in `src/lib/latinSquare.ts`). As a result,
+all ten mock tests are equally hard and still ramp from easy to hard. In v2 the load varied
+by up to 35% from one test to the next. A low Latin square now always needs at least one
+other field filled in before the question mark can be resolved.
+
+### Mathematical Equations difficulty (bank v4)
+
+Mathematical Equations became about **20% harder** in bank v4. The shape of a system did
+not change: low, medium and high still have 2, 3 and 4 unknowns with as many equations,
+and every unknown is still an integer from 1 to 20 with exactly one solution. What changed
+is how much arithmetic each equation carries. More definitions take two operations
+(`3 × C - 11 = B`) or combine two unknowns (`2 × A + C = B`). The pinning equation is more
+often a signed sum over all unknowns or a weighted pair (`2 × A + B = 23`). Low systems
+can be pinned by a two-step equation (`3 × A + 4 = 19`).
+
+The load is measured per equation as its arithmetic operators plus the unknowns it links
+(`equationLoad` in `src/lib/equations.ts`).
+
+| | low | medium | high | Section total |
+| --- | --- | --- | --- | --- |
+| v2 (mean per task) | 5.7 | 11.0 | 15.6 | 215.7 (range 208–225) |
+| v4 (mean per task) | 6.8 | 13.3 | 18.7 | **259** in every test (+20%) |
+
+As in the other two subtests, `MATH_LOAD_PLAN` fixes the load of each of the 20 slots,
+so all ten mock tests are equally hard.
+
 See `src/lib/validateBank.ts`, `src/lib/signature.ts`, `npm run validate:bank`,
 `npm run audit:bank`, `tests/questionBank.test.ts` and `tests/bankIntegrity.test.ts`.
 
